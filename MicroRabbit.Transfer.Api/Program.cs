@@ -1,11 +1,36 @@
+using MicroRabbit.Domain.Core.Bus;
+using MicroRabbit.Infra.IoC;
+using MicroRabbit.Transfer.Data.Context;
+using MicroRabbit.Transfer.Domain.EventHandlers;
+using MicroRabbit.Transfer.Domain.Events;
+using Microsoft.EntityFrameworkCore;
+using System.Reflection;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-
 builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+var services = builder.Services;
+
+services.AddDbContext<TransferDbContext>(options =>
+{
+    options.UseSqlServer(builder.Configuration.GetConnectionString("TransferDbConnection"));
+});
+
+services.AddControllers();
+services.AddEndpointsApiExplorer();
+services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo { Title = "Transfer Microservice", Version = "v1" });
+});
+services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly()));
+
+RegisterServices(builder.Services);
+
+void RegisterServices(IServiceCollection services)
+{
+    DependencyContainer.RegisterServices(services);
+}
 
 var app = builder.Build();
 
@@ -21,5 +46,14 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 
 app.MapControllers();
+
+ConfigureEventBus(app);
+
+void ConfigureEventBus(WebApplication app)
+{
+    using var scope = app.Services.CreateScope();
+    var eventBus = scope.ServiceProvider.GetRequiredService<IEventBus>();
+    eventBus.Subscribe<TransferCreatedEvent, TransferEventHandler>();
+}
 
 app.Run();
